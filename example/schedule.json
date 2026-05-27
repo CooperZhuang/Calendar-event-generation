@@ -1,0 +1,22 @@
+[
+  {
+    "title": "项目周会",
+    "start_date": "2026-06-15",
+    "start_time": "09:00",
+    "end_date": "2026-06-15",
+    "end_time": "10:00",
+    "is_all_day": false,
+    "location_name": "3号会议室",
+    "description": "本周进度同步"
+  },
+  {
+    "title": "团队聚餐",
+    "start_date": "2026-06-20",
+    "start_time": "18:30",
+    "end_date": "2026-06-20",
+    "end_time": "21:00",
+    "is_all_day": false,
+    "location_name": "海底捞火锅(人民广场店)",
+    "description": "Q2 庆祝"
+  }
+]

@@ -1,0 +1,25 @@
+name: Sync Badminton ICS
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    if: github.repository == 'CooperZhuang/calendar-event-generation'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync badminton ICS
+        env:
+          CALENDAR_URL: ${{ secrets.CALENDAR_URL }}
+        run: python3 schedule_agent.py --sync-badminton
+
+      - name: Push to secret gist
+        if: hashFiles('badminton.ics') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: |
+          gh gist edit ${{ secrets.GIST_ID }} badminton.ics

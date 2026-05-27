@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.bak
+*.swp
+*.swo
+.DS_Store
+
+# uv / pip
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Generated .ics output (CI 产物，不进仓库)
+*.ics
+
+# macOS
+._*
+*.AppleDouble
+# Secrets
+.env
