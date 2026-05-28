@@ -1,0 +1,28 @@
+{
+  "badminton_keywords": [
+    "羽毛球",
+    "羽球",
+    "打球",
+    "badminton",
+    "Badminton"
+  ],
+  "last_updated": null,
+  "locations": [
+    {
+      "id": "example_gym",
+      "name": "Example Badminton Center",
+      "address": "123 Example Street, Your City",
+      "keywords": [
+        "Example",
+        "Badminton Center"
+      ],
+      "loc_line": "Example Badminton Center\\n123 Example Street",
+      "latitude": 31.2304,
+      "longitude": 121.4737,
+      "radius": 100.0,
+      "structured_loc": "geo:31.2304,121.4737",
+      "source": "manual"
+    }
+  ],
+  "_comment": "This is a template. Copy to locations.json and fill in your own locations."
+}

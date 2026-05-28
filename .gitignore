@@ -24,3 +24,5 @@ env/
 # Secrets
 .env
 !.env.example
+# Sensitive local data — never commit real locations
+locations.json

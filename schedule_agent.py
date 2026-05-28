@@ -68,6 +68,7 @@ BADMINTON_ICS_FILE = os.path.join(
 )                                              # 羽毛球公共订阅 .ics（累积更新）
 CALENDAR_URL = os.environ.get("CALENDAR_URL", "")              # 从环境变量读取，不在源码中暴露
 LOCATIONS_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "locations.json")
+LOCATIONS_EXAMPLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "locations.example.json")
 
 # ====================================================================
 # 地点配置（JSON）加载与保存
@@ -82,7 +83,12 @@ def load_locations() -> dict:
         "locations": [],
     }
     if not os.path.exists(LOCATIONS_JSON):
-        return default
+        if os.path.exists(LOCATIONS_EXAMPLE):
+            import shutil
+            shutil.copyfile(LOCATIONS_EXAMPLE, LOCATIONS_JSON)
+            print(f"📋 已从 {os.path.basename(LOCATIONS_EXAMPLE)} 初始化地点配置，请替换为你的真实数据")
+        else:
+            return default
     try:
         with open(LOCATIONS_JSON, "r", encoding="utf-8") as f:
             return json.load(f)
