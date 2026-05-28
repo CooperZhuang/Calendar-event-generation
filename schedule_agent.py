@@ -32,6 +32,7 @@ _parse_time 便捷格式：
 from __future__ import annotations
 
 import json
+import ai_parser
 import os
 import re
 import subprocess
@@ -1049,8 +1050,181 @@ def print_preview(event: dict):
 # ====================================================================
 
 
+def ai_mode():
+    """AI-powered interactive mode: parse images or free-form text via AI.
+
+    Accepts image file paths or pasted text. Events accumulate across
+    rounds; type 'd' to finish and generate .ics.
+    """
+    try:
+        from openai import OpenAI  # noqa: F401
+    except ImportError:
+        print("❌ 缺少 openai 依赖，请运行: pip install openai")
+        sys.exit(1)
+
+    model = os.environ.get("OPENAI_MODEL", "gpt-4o")
+    base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+
+    print()
+    print("=" * 56)
+    print("  🤖 AI 日程解析模式")
+    print("=" * 56)
+    print(f"  模型: {model}")
+    print(f"  API : {base_url}")
+    print()
+    print("  图片: 拖入或输入文件路径（多张用英文逗号分隔）")
+    print("  文本: 直接粘贴非结构化日程描述")
+    print("  输入 'd' 完成并生成 .ics，输入 'q' 退出")
+    print("-" * 56)
+    print()
+
+    locations_data = load_locations()
+    locations = locations_data.get("locations", [])
+
+    ics_events = None
+    if CALENDAR_URL:
+        try:
+            print("📡 正在获取最新日历数据...")
+            ics_text = fetch_ics(CALENDAR_URL)
+            update_locations_from_ics(ics_text, LOCATIONS_JSON)
+            locations_data = load_locations()
+            locations = locations_data.get("locations", [])
+            ics_events = parse_ics_events(split_vevents(ics_text))
+        except Exception:
+            pass
+
+    all_events: list[dict] = []
+
+    while True:
+        try:
+            raw = input("📋 图片/文本 > ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+
+        if raw.lower() == "q":
+            print("👋 已退出")
+            return
+
+        if raw.lower() == "d":
+            if not all_events:
+                print("⚠️  还没有收集到任何日程")
+                continue
+            break
+
+        if not raw:
+            continue
+
+        image_paths: list[str] = []
+        text_input: str | None = None
+
+        parts = [p.strip() for p in raw.split(",")]
+        looks_like_files = all(
+            "/" in p or "\\" in p or any(p.lower().endswith(ext)
+            for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".bmp"))
+            for p in parts
+        )
+
+        if looks_like_files:
+            valid_paths = []
+            for p in parts:
+                p = os.path.expanduser(p)
+                if os.path.isfile(p):
+                    valid_paths.append(p)
+                else:
+                    print(f"  ⚠️  文件不存在，跳过: {p}")
+            if valid_paths:
+                image_paths = valid_paths
+            else:
+                print("  ❌ 没有有效的图片文件")
+                continue
+        else:
+            text_input = raw
+
+        img_label = f"{len(image_paths)} 张图片" if image_paths else ""
+        txt_label = "文本" if text_input else ""
+        label = " + ".join(filter(None, [img_label, txt_label]))
+        print(f"⏳ 正在调用 AI 解析 ({label})...")
+
+        try:
+            parsed = ai_parser.parse_with_ai(
+                image_paths=image_paths if image_paths else None,
+                text=text_input,
+            )
+        except Exception as e:
+            print(f"  ❌ AI 解析失败: {e}")
+            continue
+
+        if not parsed:
+            print("  ⚠️  AI 未解析到任何日程")
+            continue
+
+        print(f"✅ 解析到 {len(parsed)} 个日程：\n")
+
+        for ev in parsed:
+            event = build_event(ev, locations)
+            print_preview(event)
+            all_events.append(event)
+            print()
+
+    if not all_events:
+        print("👋 没有日程需要生成")
+        return
+
+    if len(all_events) > 1:
+        before = len(all_events)
+        all_events = dedup_events_internal(all_events)
+        skipped = before - len(all_events)
+        if skipped:
+            print(f"  → 输入内去重：跳过了 {skipped} 个重复项")
+
+    final_events = all_events
+    if sys.platform == "darwin" and ics_events:
+        print("🔍 检查日历中是否有重复事件...")
+        deduped = []
+        for event in all_events:
+            if check_duplicate_via_ics(ics_events, event):
+                print(f"  ⏭️  「{event['title']}」{event['start_date']} 已存在，跳过")
+            else:
+                deduped.append(event)
+        final_events = deduped
+
+    if not final_events:
+        print("✅ 全部已存在，无需导入")
+        return
+
+    if len(final_events) == 1:
+        ics = generate_ics(final_events[0])
+    else:
+        ics = generate_combined_ics(final_events)
+    saved = save_ics_file(ics)
+    if saved:
+        print(f"  → .ics 已保存: {saved}")
+
+    if sys.platform == "darwin":
+        print("📅 导入日历...")
+        import_to_calendar(saved)
+    else:
+        print(f"📄 非 macOS，仅生成 .ics: {saved}")
+
+    locations_data = load_locations()
+    badminton_kw = locations_data.get("badminton_keywords", ["羽毛球"])
+    if CALENDAR_URL:
+        try:
+            print("🏸 更新羽毛球订阅日历...")
+            sync_badminton_ics(CALENDAR_URL, badminton_kw, BADMINTON_ICS_FILE)
+        except Exception as e:
+            print(f"⚠️  同步羽毛球订阅失败: {e}")
+
+    print("\n✅ 完成！")
+
+
 def main():
-    # --- 0. 特殊模式：仅同步羽毛球 .ics ---
+    # --- 0. 特殊模式 ---
+    if len(sys.argv) > 1 and sys.argv[1] in ("--ai", "--vision"):
+        ai_mode()
+        return
+
     if len(sys.argv) > 1 and sys.argv[1] in ("--interactive", "-i"):
         interactive_mode()
         return
@@ -1109,9 +1283,10 @@ def main():
         text = sys.stdin.read().strip()
     else:
         print("用法:")
-        print("  cat schedule.txt | uv run schedule_agent.py")
-        print('  uv run schedule_agent.py "标题：..."')
-        print("  uv run schedule_agent.py -i    交互式问答模式")
+        print("  cat schedule.txt | python3 schedule_agent.py")
+        print('  python3 schedule_agent.py "标题：..."')
+        print("  python3 schedule_agent.py -i    交互式问答模式")
+        print("  python3 schedule_agent.py --ai  AI 图片/文本解析模式")
         sys.exit(1)
 
     if not text.strip():

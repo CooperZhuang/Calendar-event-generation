@@ -235,6 +235,69 @@ deduped2 = dedup_events_internal([
 check(len(deduped2) == 2, "无重复时不变")
 
 # ─── 汇总 ───
+import ai_parser
+
+
+# ─── 15. AI Parser 模块 ───
+print("\n── AI Parser ──")
+check(hasattr(ai_parser, "_build_prompt"), "_build_prompt 存在")
+check(hasattr(ai_parser, "_encode_image"), "_encode_image 存在")
+check(hasattr(ai_parser, "_extract_json"), "_extract_json 存在")
+check(hasattr(ai_parser, "parse_with_ai"), "parse_with_ai 存在")
+
+# Prompt substitution
+prompt = ai_parser._build_prompt()
+today = datetime.now().strftime("%Y-%m-%d")
+check(today in prompt, f"prompt 包含当前日期 {today}")
+check("{current_time}" not in prompt, "prompt 中无未替换的占位符")
+
+# JSON extraction (strip markdown fences)
+raw = '```json\n[{"title":"测试"}]\n```'
+clean = ai_parser._extract_json(raw)
+check(clean == '[{"title":"测试"}]', f"去除 markdown 代码块: {clean!r}")
+
+raw2 = '[{"title":"无包裹"}]'
+clean2 = ai_parser._extract_json(raw2)
+check(clean2 == '[{"title":"无包裹"}]', f"无需去除: {clean2!r}")
+
+# Image encoding (use a small test file)
+import struct, zlib
+
+
+def _create_minimal_png(path: str):
+    """Create a 1x1 red pixel PNG for testing."""
+    def chunk(chunk_type, data):
+        c = chunk_type + data
+        crc = struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
+        return struct.pack(">I", len(data)) + c + crc
+
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    raw_pixel = b"\x00\xff\x00\x00"
+    idat = zlib.compress(raw_pixel)
+
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n")
+        f.write(chunk(b"IHDR", ihdr))
+        f.write(chunk(b"IDAT", idat))
+        f.write(chunk(b"IEND", b""))
+
+
+test_png = os.path.join(os.path.dirname(__file__), "_test_1x1.png")
+_create_minimal_png(test_png)
+try:
+    data_url = ai_parser._encode_image(test_png)
+    check(data_url.startswith("data:image/png;base64,"), f"PNG base64 编码: {data_url[:30]}...")
+finally:
+    os.remove(test_png)
+
+# parse_with_ai 无参数应抛错
+try:
+    ai_parser.parse_with_ai()
+    check(False, "无参数应抛 ValueError")
+except ValueError:
+    check(True, "无参数正确抛 ValueError")
+
+# ─── 汇总 ───
 print(f"\n{'='*40}")
 print(f"  通过: {passed}  |  失败: {failed}  |  总计: {passed + failed}")
 print(f"{'='*40}")
