@@ -13,7 +13,7 @@
 这个项目把流程拆成两步：
 
 1. **📸 图片/OCR → 结构化 JSON** — 把截图发给任意支持视觉的 AI，用下方的 [Prompt](#图片ocr--json-prompt) 一键提取为标准 JSON
-2. **📅 JSON → .ics 日历文件** — 把 JSON 喂给 `schedule_agent.py`，自动生成带精确地图坐标的 `.ics`，双击即可导入系统日历
+2. **📅 JSON → .ics 日历文件** — 把 JSON 喂给 `main.py`，自动生成带精确地图坐标的 `.ics`，双击即可导入系统日历
 
 或者更简单——直接用内置的 `--ai` 模式，一步到位。
 
@@ -24,7 +24,7 @@ git clone https://github.com/CooperZhuang/calendar-event-generation.git
 cd calendar-event-generation
 
 # 文本输入
-python3 schedule_agent.py "标题：羽毛球
+python3 main.py "标题：羽毛球
 开始日期：2026-06-07
 开始时间：14:00
 结束日期：2026-06-07
@@ -33,7 +33,7 @@ python3 schedule_agent.py "标题：羽毛球
 描述：费用：¥34"
 
 # JSON 输入
-python3 schedule_agent.py << 'EOF'
+python3 main.py << 'EOF'
 [
   {
     "title": "项目周会",
@@ -48,7 +48,7 @@ python3 schedule_agent.py << 'EOF'
 EOF
 
 # 交互式问答
-python3 schedule_agent.py -i
+python3 main.py -i
 ```
 
 > Python ≥ 3.11。macOS 可直接导入日历应用；其他平台输出 `.ics` 文件。
@@ -102,7 +102,7 @@ cp .env.example .env
 pip install openai
 
 # 3. 启动 AI 模式
-python3 schedule_agent.py --ai
+python3 main.py --ai
 ```
 
 交互流程：
@@ -195,7 +195,7 @@ python3 schedule_agent.py --ai
 将 Prompt 中的 `{{CURRENT_TIME}}` 替换为当日日期（如 `2026-05-28 Wednesday`），与截图一起发给 AI，将返回的 JSON 保存后运行：
 
 ```bash
-cat event.json | python3 schedule_agent.py
+cat event.json | python3 main.py
 ```
 
 ## 羽毛球订阅
@@ -203,7 +203,7 @@ cat event.json | python3 schedule_agent.py
 CI 每 6 小时从 iCloud 拉取日历，按关键字匹配羽毛球活动，生成 `badminton.ics` 推送至 Secret Gist。Gist 不被索引、不可搜索——仅持有完整链接者可订阅。
 
 ```bash
-python3 schedule_agent.py --sync-badminton   # 手动触发
+python3 main.py --sync-badminton   # 手动触发
 ```
 
 订阅者将 Gist raw URL 添加至日历应用即可，每 12 小时自动刷新。
@@ -234,7 +234,7 @@ CI Secrets（GitHub Actions）：
 ## 项目结构
 
 ```
-schedule_agent.py
+main.py
 ai_parser.py                   # AI 图片/文本解析模块
 locations.json                 # 场馆数据库
 tests/test_all.py              # 83 项测试

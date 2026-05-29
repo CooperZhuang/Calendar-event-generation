@@ -15,8 +15,8 @@ env/
 .vscode/
 .idea/
 
-# Generated .ics output (CI 产物，不进仓库)
-*.ics
+# Generated output (CI 产物，不进仓库)
+output/*.ics
 
 # macOS
 ._*

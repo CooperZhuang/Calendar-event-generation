@@ -235,7 +235,7 @@ deduped2 = dedup_events_internal([
 check(len(deduped2) == 2, "无重复时不变")
 
 # ─── 汇总 ───
-import ai_parser
+from schedule_agent import ai_parser
 
 
 # ─── 15. AI Parser 模块 ───
