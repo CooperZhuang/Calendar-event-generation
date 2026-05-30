@@ -251,7 +251,6 @@ tests/
 └── fixtures/schedule.json
 .env.example                   # 配置文件模板
 .github/workflows/
-├── test.yml                   # CI
 └── sync-badminton.yml         # 每 6h 同步
 ```
 
