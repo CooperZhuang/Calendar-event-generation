@@ -1,10 +1,10 @@
 # 🏸 calendar-event-generation
 
-[![Dependencies](https://img.shields.io/badge/dependencies-zero-success)](https://github.com/CooperZhuang/calendar-event-generation/blob/main/pyproject.toml)
+[![依赖关系](https://img.shields.io/badge/dependencies-zero-success)](https://github.com/CooperZhuang/calendar-event-generation/blob/main/pyproject.toml)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![许可证](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-结构化日程文本 / JSON → `.ics` 日历事件，一键导入 Apple / Google / Outlook 日历。纯 Python，零依赖。
+结构化日程文本 / JSON → `.ics` 日历事件，一键导入 Apple / Google / Outlook 日历。
 
 ## 为什么有这个项目
 
