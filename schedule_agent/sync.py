@@ -2,10 +2,7 @@
 from __future__ import annotations
 import os
 from datetime import datetime, timezone
-
-from .config import BADMINTON_ICS_FILE, CALENDAR_URL, LOCATIONS_JSON, _PROJECT_DIR
 from .ics_utils import fetch_ics, unfold_ics, split_vevents, _get_prop, _prop_value
-from .locations import load_locations, save_locations
 def sync_badminton_ics(calendar_url: str, badminton_kw: list[str],
                        output_path: str) -> int:
     """从 iCloud 日历拉取全部事件，筛选羽毛球相关，生成累积 .ics

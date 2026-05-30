@@ -14,7 +14,7 @@ import sys
 from datetime import datetime, timedelta
 
 from schedule_agent.config import (
-    CALENDAR_NAME, CONFIRM_BEFORE_IMPORT, ICS_OUTPUT_FILE,
+    BADMINTON_KEYWORDS, CALENDAR_NAME, CONFIRM_BEFORE_IMPORT, ICS_OUTPUT_FILE,
     BADMINTON_ICS_FILE, CALENDAR_URL, LOCATIONS_JSON, _PROJECT_DIR,
 )
 from schedule_agent.locations import load_locations, update_locations_from_ics
@@ -43,7 +43,7 @@ def main():
         if not CALENDAR_URL:
             print("❌ 需要配置 CALENDAR_URL")
             sys.exit(1)
-        badminton_kw = ["羽毛球", "羽球", "打球", "badminton", "Badminton"]
+        badminton_kw = BADMINTON_KEYWORDS
         try:
             print("🏸 正在同步羽毛球订阅日历...")
             count = sync_badminton_ics(CALENDAR_URL, badminton_kw, BADMINTON_ICS_FILE)
@@ -177,7 +177,7 @@ def main():
 
     # --- 9. 同步羽毛球订阅 .ics ---
     locations_data = load_locations()
-    badminton_kw = locations_data.get("badminton_keywords", ["羽毛球"])
+    badminton_kw = BADMINTON_KEYWORDS
     if CALENDAR_URL:
         try:
             print("🏸 更新羽毛球订阅日历...")

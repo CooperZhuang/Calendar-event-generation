@@ -7,12 +7,12 @@ import re
 import shutil
 import urllib.request
 
-from .config import LOCATIONS_JSON, LOCATIONS_EXAMPLE, _PROJECT_DIR
+from .config import BADMINTON_KEYWORDS, LOCATIONS_JSON, LOCATIONS_EXAMPLE, _PROJECT_DIR
 from .ics_utils import split_vevents, parse_ics_events
 def load_locations() -> dict:
     """加载 locations.json，返回 {locations: [...], badminton_keywords: [...], ...}"""
     default = {
-        "badminton_keywords": ["羽毛球", "羽球", "打球", "badminton", "Badminton"],
+        "badminton_keywords": list(BADMINTON_KEYWORDS),
         "last_updated": None,
         "locations": [],
     }

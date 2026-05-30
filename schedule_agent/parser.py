@@ -4,6 +4,7 @@ import json
 import re
 from datetime import datetime, timedelta
 from .ics_utils import _add_days
+from .config import BADMINTON_KEYWORDS
 FIELD_NAMES = {
     "标题": "title",
     "开始日期": "start_date",
@@ -361,7 +362,6 @@ def parse_input_batch(text: str) -> list[dict]:
 
 def _normalize_title(title: str) -> str:
     """统一标题用于去重比较（羽毛球活动 → 羽毛球）"""
-    badminton_kw = ["羽毛球", "羽球", "打球", "badminton", "Badminton"]
-    if any(kw in title for kw in badminton_kw):
+    if any(kw in title for kw in BADMINTON_KEYWORDS):
         return "羽毛球"
     return title

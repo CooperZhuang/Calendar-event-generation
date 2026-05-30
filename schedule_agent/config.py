@@ -18,6 +18,7 @@ CALENDAR_NAME = "个人日程"
 CONFIRM_BEFORE_IMPORT = True
 ICS_OUTPUT_FILE = os.path.join(_PROJECT_DIR, "output", "schedule.ics")
 BADMINTON_ICS_FILE = os.path.join(_PROJECT_DIR, "output", "badminton.ics")
+BADMINTON_KEYWORDS = ["羽毛球", "羽球", "打球", "badminton", "Badminton"]
 CALENDAR_URL = os.environ.get("CALENDAR_URL", "")
 LOCATIONS_JSON = os.path.join(_PROJECT_DIR, "data", "locations.json")
 LOCATIONS_EXAMPLE = os.path.join(_PROJECT_DIR, "data", "locations.example.json")

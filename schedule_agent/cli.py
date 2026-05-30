@@ -12,7 +12,10 @@ import tty
 from datetime import datetime, timedelta
 
 from .ai_parser import parse_with_ai
-from .config import CALENDAR_NAME, CONFIRM_BEFORE_IMPORT, ICS_OUTPUT_FILE, BADMINTON_ICS_FILE, CALENDAR_URL, LOCATIONS_JSON, _PROJECT_DIR
+from .config import (
+    BADMINTON_KEYWORDS, CALENDAR_NAME, CONFIRM_BEFORE_IMPORT, ICS_OUTPUT_FILE,
+    BADMINTON_ICS_FILE, CALENDAR_URL, LOCATIONS_JSON, _PROJECT_DIR,
+)
 from .locations import load_locations, update_locations_from_ics
 from .ics_utils import fetch_ics, unfold_ics, split_vevents, parse_ics_events, generate_ics, generate_combined_ics
 from .parser import parse_input, parse_input_batch
@@ -434,7 +437,7 @@ def ai_mode():
         print(f"📄 非 macOS，仅生成 .ics: {saved}")
 
     locations_data = load_locations()
-    badminton_kw = locations_data.get("badminton_keywords", ["羽毛球"])
+    badminton_kw = BADMINTON_KEYWORDS
     if CALENDAR_URL:
         try:
             print("🏸 更新羽毛球订阅日历...")
@@ -593,7 +596,7 @@ def interactive_mode():
 
     # --- 同步羽毛球订阅 .ics ---
     locations_data = load_locations()
-    badminton_kw = locations_data.get("badminton_keywords", ["羽毛球"])
+    badminton_kw = BADMINTON_KEYWORDS
     if CALENDAR_URL:
         try:
             print("  🏸 更新羽毛球订阅日历...")
