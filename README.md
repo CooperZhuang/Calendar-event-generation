@@ -232,13 +232,23 @@ CI Secrets（GitHub Actions）：
 | `GIST_ID` | Secret Gist ID |
 
 ## 项目结构
-
 ```
-main.py
-ai_parser.py                   # AI 图片/文本解析模块
-locations.json                 # 场馆数据库
-tests/test_all.py              # 83 项测试
-example/schedule.json
+main.py                        # CLI 入口
+schedule_agent/                # 核心包
+├── __init__.py
+├── ai_parser.py               # AI 图片/文本解析
+├── cli.py                     # 命令行处理
+├── config.py                  # 环境变量读取
+├── events.py                  # 事件模型
+├── ics_utils.py               # ICS 文件生成
+├── locations.py               # 场馆坐标匹配
+├── parser.py                  # 文本解析
+└── sync.py                    # iCloud 日历同步
+data/
+└── locations.json             # 场馆数据库
+tests/
+├── test_all.py                # 83 项测试
+└── fixtures/schedule.json
 .env.example                   # 配置文件模板
 .github/workflows/
 ├── test.yml                   # CI
