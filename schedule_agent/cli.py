@@ -34,8 +34,8 @@ def ai_mode():
     print(f"  模型: {model}")
     print(f"  API : {base_url}")
     print()
-    print("  图片: 拖入或输入文件路径（多张用英文逗号分隔）")
-    print("  文本: 直接粘贴非结构化日程描述")
+    print("  图片: 拖入或输入文件路径（英文逗号分隔多张，回车确认）")
+    print("  文本: 直接粘贴日程描述（多行内容粘贴后补一个空行确认）")
     print("  输入 'd' 完成并生成 .ics，输入 'q' 退出")
     print("-" * 56)
     print()
@@ -77,15 +77,16 @@ def ai_mode():
         if not raw:
             continue
 
-        image_paths: list[str] = []
-        text_input: str | None = None
-
+        # 判断是文件路径还是文本
         parts = [p.strip() for p in raw.split(",")]
         looks_like_files = all(
             "/" in p or "\\" in p or any(p.lower().endswith(ext)
             for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".bmp"))
             for p in parts
         )
+
+        image_paths: list[str] = []
+        text_input: str | None = None
 
         if looks_like_files:
             valid_paths = []
@@ -101,7 +102,17 @@ def ai_mode():
                 print("  ❌ 没有有效的图片文件")
                 continue
         else:
-            text_input = raw
+            # 多行文本：继续读取直到空行
+            lines = [raw]
+            while True:
+                try:
+                    line = input()
+                except (EOFError, KeyboardInterrupt):
+                    break
+                if not line.strip():
+                    break
+                lines.append(line)
+            text_input = "\n".join(lines)
 
         img_label = f"{len(image_paths)} 张图片" if image_paths else ""
         txt_label = "文本" if text_input else ""
