@@ -15,6 +15,39 @@ from .parser import parse_input, parse_input_batch
 from .events import build_event, save_ics_file, print_preview, check_duplicate_via_ics, dedup_events_internal, import_to_calendar
 from .sync import sync_badminton_ics
 
+
+def _clipboard_has_image() -> bool:
+    """检测剪贴板是否包含图片"""
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", "get the clipboard as «class PNGf»"],
+            capture_output=True, text=True, timeout=3,
+        )
+        return result.returncode == 0 and result.stdout.strip().startswith("«data PNGf")
+    except Exception:
+        return False
+
+def _read_clipboard_image() -> str | None:
+    """从剪贴板读取图片，保存为临时 PNG，返回路径"""
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", "get the clipboard as «class PNGf»"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        hex_str = result.stdout.strip()
+        if not hex_str.startswith("«data PNGf"):
+            return None
+        hex_data = hex_str[len("«data PNGf"):].rstrip("»")
+        img_bytes = bytes.fromhex(hex_data.replace(" ", ""))
+        tmp_path = os.path.join(tempfile.gettempdir(), f"codex_clipboard_{os.getpid()}.png")
+        with open(tmp_path, "wb") as f:
+            f.write(img_bytes)
+        return tmp_path
+    except Exception:
+        return None
+
 def _cleanup_tmp(path: str):
     """删除临时文件（忽略错误）"""
     try:
@@ -44,7 +77,7 @@ def ai_mode():
     print(f"  模型: {model}")
     print(f"  API : {base_url}")
     print()
-    print("  图片: :img 读剪贴板 / 拖入文件路径（英文逗号分隔多张，可多次添加后 d）")
+    print("  图片: 截图后直接回车 / :img / 拖入文件路径（英文逗号分隔多张）")
     print("  文本: 直接粘贴日程描述（多行粘贴后补空行，解析后即确认导入）")
     print("  命令: :img 读剪贴板 | d 生成ics | q 退出")
     print("-" * 56)
@@ -84,35 +117,16 @@ def ai_mode():
                 continue
             break
 
-        if raw.lower() == ":img":
+        if raw.lower() == ":img" or (not raw and _clipboard_has_image()):
+            if not raw:
+                print("  📋 检测到剪贴板图片，自动读取...")
             # 从剪贴板读取图片
-            print("  📋 正在从剪贴板读取图片...")
-            try:
-                result = subprocess.run(
-                    ["osascript", "-e", "get the clipboard as «class PNGf»"],
-                    capture_output=True, text=True, timeout=10,
-                )
-                if result.returncode != 0 or not result.stdout.strip():
-                    print("  ❌ 剪贴板中没有图片")
-                    continue
-                hex_str = result.stdout.strip()
-                if not hex_str.startswith("«data PNGf"):
-                    print("  ❌ 剪贴板数据格式异常")
-                    continue
-                hex_data = hex_str[len("«data PNGf"):].rstrip("»")
-                img_bytes = bytes.fromhex(hex_data.replace(" ", ""))
-                tmp_path = os.path.join(tempfile.gettempdir(), f"codex_clipboard_{os.getpid()}.png")
-                with open(tmp_path, "wb") as f:
-                    f.write(img_bytes)
-                image_paths = [tmp_path]
-                print(f"  ✅ 已读取剪贴板图片 ({len(img_bytes)} 字节)")
-            except subprocess.TimeoutExpired:
-                print("  ❌ 读取剪贴板超时")
+            tmp_path = _read_clipboard_image()
+            if not tmp_path:
+                print("  ❌ 剪贴板中没有图片")
                 continue
-            except Exception as e:
-                print(f"  ❌ 读取剪贴板失败: {e}")
-                continue
-
+            image_paths = [tmp_path]
+            print(f"  ✅ 已读取剪贴板图片 ({os.path.getsize(tmp_path)} 字节)")
             print("⏳ 正在调用 AI 解析 (剪贴板图片)...")
             try:
                 parsed = parse_with_ai(image_paths=image_paths)
