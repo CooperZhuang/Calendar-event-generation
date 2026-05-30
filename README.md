@@ -232,6 +232,50 @@ CI Secrets（GitHub Actions）：
 | `GIST_ID` | Secret Gist ID |
 
 ## 项目结构
+
+## 运行流程
+
+```mermaid
+flowchart TD
+    A["启动"] --> B{"运行模式"}
+
+    B -->|"python3 main.py"| C["📋 加载场馆数据库"]
+    C --> D["📡 拉取 iCloud 日历"]
+    D --> E{"发现新场馆？"}
+    E -->|是| F["写入 locations.json"]
+    E -->|否| G["解析用户输入"]
+    F --> G
+    G --> H["🔍 地点模糊匹配"]
+    H --> I["🕐 时间解析 / 跨天推算"]
+    I --> J["🏷️ 标题归一化"]
+    J --> K["🔁 内部去重"]
+    K --> L["🔁 iCloud 交叉比对去重"]
+    L --> M["👀 预览确认"]
+    M --> N["💾 生成 .ics"]
+    N --> O{"macOS？"}
+    O -->|是| P["📲 导入系统日历"]
+    O -->|否| Q["📄 仅输出 .ics 文件"]
+    P --> R["🏸 同步羽毛球订阅"]
+    Q --> R
+    R --> Z["✅ 完成"]
+
+    B -->|"python3 main.py --ai"| A1["🤖 交互式输入"]
+    A1 --> A2["Cmd+V 粘贴截图 / 输入文本"]
+    A2 --> A3{"确认解析？"}
+    A3 -->|是| A4["📡 调用 OpenAI 兼容 API"]
+    A3 -->|继续添加| A2
+    A4 --> A5["📤 提取 JSON"]
+    A5 --> H
+
+    B -->|"python3 main.py --sync-badminton"| S1["📡 拉取 iCloud 日历"]
+    S1 --> S2["🔎 羽毛球关键字筛选"]
+    S2 --> S3["💾 生成 badminton.ics"]
+    S3 --> S4{"CI 环境？"}
+    S4 -->|是| S5["⬆️ 推送 Secret Gist"]
+    S4 -->|否| Z
+    S5 --> Z
+```
+
 ```
 main.py                        # CLI 入口
 schedule_agent/                # 核心包
