@@ -1,6 +1,6 @@
 [project]
 name = "calendar-event-generation"
-version = "1.0.1"
+version = "1.0.2"
 description = "日程文本 → .ics 生成 + 自动插入 Mac 日历（含去重、自动发现新地点）"
 readme = "README.md"
 license = { text = "MIT" }

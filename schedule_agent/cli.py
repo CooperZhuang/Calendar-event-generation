@@ -58,45 +58,14 @@ def _cleanup_tmp(path: str):
     except OSError:
         pass
 
-
-
-def _clipboard_has_image() -> bool:
-    """检测剪贴板是否包含图片"""
+def _clear_clipboard():
+    """清空剪贴板"""
     try:
-        result = subprocess.run(
-            ["osascript", "-e", "get the clipboard as «class PNGf»"],
-            capture_output=True, text=True, timeout=3,
+        subprocess.run(
+            ["osascript", "-e", 'set the clipboard to ""'],
+            capture_output=True, timeout=3,
         )
-        return result.returncode == 0 and result.stdout.strip().startswith("«data PNGf")
     except Exception:
-        return False
-
-def _read_clipboard_image() -> str | None:
-    """从剪贴板读取图片，保存为临时 PNG，返回路径"""
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", "get the clipboard as «class PNGf»"],
-            capture_output=True, text=True, timeout=10,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
-            return None
-        hex_str = result.stdout.strip()
-        if not hex_str.startswith("«data PNGf"):
-            return None
-        hex_data = hex_str[len("«data PNGf"):].rstrip("»")
-        img_bytes = bytes.fromhex(hex_data.replace(" ", ""))
-        tmp_path = os.path.join(tempfile.gettempdir(), f"codex_clipboard_{os.getpid()}.png")
-        with open(tmp_path, "wb") as f:
-            f.write(img_bytes)
-        return tmp_path
-    except Exception:
-        return None
-
-def _cleanup_tmp(path: str):
-    """删除临时文件（忽略错误）"""
-    try:
-        os.remove(path)
-    except OSError:
         pass
 
 def _input_paste_aware(prompt):
@@ -182,7 +151,7 @@ def ai_mode():
     print(f"  模型: {model}")
     print(f"  API : {base_url}")
     print()
-    print("  图片: Cmd+V 粘贴截图 / 拖入文件路径（英文逗号分隔多张，可多次添加后 d）")
+    print("  图片: Cmd+V 粘贴截图 → 可添加多张 → 确认后 AI 解析生成 .ics")
     print("  文本: 直接粘贴日程描述（多行粘贴后补空行，解析后即确认导入）")
     print("  命令: d 生成ics | q 退出")
     print("-" * 56)
@@ -204,6 +173,7 @@ def ai_mode():
             pass
 
     all_events: list[dict] = []
+    pending_images: list[str] = []  # 待解析的剪贴板图片临时路径
 
     while True:
         try:
@@ -217,10 +187,35 @@ def ai_mode():
             break
 
         if raw.lower() == "q":
+            # 清理待解析图片
+            for p in pending_images:
+                _cleanup_tmp(p)
+            pending_images.clear()
             print("👋 已退出")
             return
 
         if raw.lower() == "d":
+            # 有待解析图片 → 自动解析
+            if pending_images:
+                print(f"⏳ 正在调用 AI 解析 ({len(pending_images)} 张待解析图片)...")
+                try:
+                    parsed = parse_with_ai(image_paths=list(pending_images))
+                except Exception as e:
+                    print(f"  ❌ AI 解析失败: {e}")
+                    for p in pending_images:
+                        _cleanup_tmp(p)
+                    pending_images.clear()
+                    continue
+                for p in pending_images:
+                    _cleanup_tmp(p)
+                pending_images.clear()
+                if parsed:
+                    print(f"  ✅ 解析到 {len(parsed)} 个日程：\n")
+                    for ev in parsed:
+                        event = build_event(ev, locations)
+                        print_preview(event)
+                        all_events.append(event)
+                        print()
             if not all_events:
                 print("⚠️  还没有收集到任何日程")
                 continue
@@ -238,21 +233,68 @@ def ai_mode():
             is_paths = False
         if raw.lower() == ":img" or (not is_paths and raw.lower() not in ("q", "d") and _clipboard_has_image()):
             print("  📋 检测到剪贴板图片，读取中...")
-            # 从剪贴板读取图片
             tmp_path = _read_clipboard_image()
             if not tmp_path:
                 print("  ❌ 剪贴板中没有图片")
                 continue
-            image_paths = [tmp_path]
-            print(f"  ✅ 已读取剪贴板图片 ({os.path.getsize(tmp_path)} 字节)")
-            print("⏳ 正在调用 AI 解析 (剪贴板图片)...")
+            pending_images.append(tmp_path)
+            _clear_clipboard()
+            print(f"  ✅ 已读取剪贴板图片 ({os.path.getsize(tmp_path)} 字节) [累计 {len(pending_images)} 张]")
             try:
-                parsed = parse_with_ai(image_paths=image_paths)
+                more = input("  还要添加更多图片吗？[回车=添加 / n=解析生成ics] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                more = "n"
+            if more in ("", "y", "yes"):
+                print("  → 请继续 Cmd+V 粘贴下一张图片\n")
+                continue
+            # 不再添加 → 解析所有累积图片
+            print(f"⏳ 正在调用 AI 解析 ({len(pending_images)} 张图片)...")
+            try:
+                parsed = parse_with_ai(image_paths=list(pending_images))
             except Exception as e:
                 print(f"  ❌ AI 解析失败: {e}")
-                _cleanup_tmp(tmp_path)
+                for p in pending_images:
+                    _cleanup_tmp(p)
+                pending_images.clear()
                 continue
-            _cleanup_tmp(tmp_path)
+            for p in pending_images:
+                _cleanup_tmp(p)
+            pending_images.clear()
+
+            if not parsed:
+                print("  ⚠️  AI 未解析到任何日程")
+                continue
+
+            print(f"✅ 解析到 {len(parsed)} 个日程：\n")
+            for ev in parsed:
+                event = build_event(ev, locations)
+                print_preview(event)
+                all_events.append(event)
+                print()
+
+            try:
+                confirm = input("  确认导入？[Y=生成ics / n=继续添加] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = "y"
+            if confirm in ("", "y", "yes"):
+                break
+            print()
+            continue
+
+        # ── 无图片但有待解析图片 → 自动解析 ──
+        if pending_images:
+            print(f"⏳ 正在调用 AI 解析 ({len(pending_images)} 张待解析图片)...")
+            try:
+                parsed = parse_with_ai(image_paths=list(pending_images))
+            except Exception as e:
+                print(f"  ❌ AI 解析失败: {e}")
+                for p in pending_images:
+                    _cleanup_tmp(p)
+                pending_images.clear()
+                continue
+            for p in pending_images:
+                _cleanup_tmp(p)
+            pending_images.clear()
 
             if not parsed:
                 print("  ⚠️  AI 未解析到任何日程")
@@ -427,110 +469,103 @@ def interactive_mode():
     print("    描述：费用￥34")
     print()
     print("  JSON 单对象：")
-    print('    {"title": "羽毛球", "start_date": "2026-05-31", ...}')
+    print('    {"标题": "羽毛球活动", "时间": "2026-05-31 19:00-21:00", ...}')
     print()
-    print("  JSON 数组（批量）：")
-    print('    [{"title": "羽毛球", ...}, {"title": "团建", ...}]')
+    print("  JSON 数组（批量导入）：")
+    print('    [{"标题": "...", ...}, {"标题": "...", ...}]')
     print()
-    print("  多段文本（用 --- 或空行分隔，批量）：")
-    print("    标题：羽毛球")
+    print("  多段文本（用 --- 或空行分隔多条日程）：")
+    print("    标题：活动一")
     print("    时间：2026-05-31 19:00-21:00")
+    print("    地点：场地A")
     print()
-    print("    标题：团建")
-    print("    时间：2026-06-01 09:00-17:00")
-    print("  ──────────────────────────────────────────")
+    print("    ---")
+    print()
+    print("    标题：活动二")
+    print("    时间：2026-06-01 14:00-16:00")
+    print("    地点：场地B")
+    print()
+    print("  输入完成后补一个空行提交。")
+    print("=" * 60)
     print()
 
-    # --- 加载地点配置 ---
     locations_data = load_locations()
     locations = locations_data.get("locations", [])
 
-    # --- 尝试获取最新 .ics ---
     ics_events = None
     if CALENDAR_URL:
         try:
-            print("  📡 正在获取最新日历数据...")
+            print("📡 正在获取最新日历数据...")
             ics_text = fetch_ics(CALENDAR_URL)
-            new_count = update_locations_from_ics(ics_text, LOCATIONS_JSON)
-            if new_count:
-                print(f"  → 发现 {new_count} 个新地点并已保存")
-            ics_events = parse_ics_events(split_vevents(unfold_ics(ics_text)))
-        except Exception as e:
-            print(f"  ⚠️  获取日历数据失败: {e}")
+            update_locations_from_ics(ics_text, LOCATIONS_JSON)
+            locations_data = load_locations()
+            locations = locations_data.get("locations", [])
+            ics_events = parse_ics_events(split_vevents(ics_text))
+        except Exception:
+            pass
 
-    # 重新加载（可能有新地点）
-    locations_data = load_locations()
-    locations = locations_data.get("locations", [])
+    print("💬 请粘贴日程内容（输入完成后补一个空行确认）：\n")
 
-    # --- 收集文本 ---
-    print("  请粘贴日程内容，输入空行结束：")
-    print()
-    input_lines = []
+    lines = []
+    blank_count = 0
     while True:
         try:
             line = input()
-        except EOFError:
+        except (EOFError, KeyboardInterrupt):
             break
         if not line.strip():
-            if not input_lines:
-                continue  # 忽略开头的空行
-            break
-        input_lines.append(line)
+            blank_count += 1
+            if blank_count >= 2:
+                break
+        else:
+            blank_count = 0
+        lines.append(line)
 
-    if not input_lines:
-        print("\n  ❌ 未输入任何内容")
+    raw_text = "\n".join(lines).strip()
+    if not raw_text:
+        print("👋 没有输入任何内容")
         return
 
-    text = "\n".join(input_lines)
-    print(f"\n  ✅ 已接收 {len(input_lines)} 行文本，正在解析...\n")
-
-    # --- 解析 ---
-    events = parse_input_batch(text)
-
-    if not events:
-        print("  ❌ 未能解析出有效事件，请检查格式后重试")
-        print()
-        print("  示例：")
-        print("    标题：羽毛球")
-        print("    时间：2026-05-31 19:00-21:00")
+    print()
+    print("⏳ 正在解析...")
+    try:
+        events_data = parse_input_batch(raw_text)
+    except Exception as e:
+        print(f"❌ 解析失败: {e}")
         return
 
-    # --- 构建并预览 ---
-    print(f"  共解析出 {len(events)} 个事件：\n")
-    for i, raw in enumerate(events):
-        if len(events) > 1:
-            print(f"  ─── [{i+1}/{len(events)}] {raw['title']} ───")
-        event = build_event(raw, locations)
+    if not events_data:
+        print("❌ 未能解析出有效日程，请检查格式")
+        return
+
+    all_events = []
+    for data in events_data:
+        event = build_event(data, locations)
         print_preview(event)
+        all_events.append(event)
+        print()
 
-    # --- 确认 ---
     try:
         confirm = input("  确认导入？[Y/n] ").strip().lower()
-    except EOFError:
+    except (EOFError, KeyboardInterrupt):
         confirm = "y"
     if confirm not in ("", "y", "yes"):
-        print("  👋 已取消")
+        print("👋 已取消")
         return
 
-    events = [build_event(raw, locations) for raw in events]
-    # --- 输入内部去重 ---
-    if len(events) > 1:
-        before = len(events)
-        events = dedup_events_internal(events)
-        skipped = before - len(events)
+    if len(all_events) > 1:
+        before = len(all_events)
+        all_events = dedup_events_internal(all_events)
+        skipped = before - len(all_events)
         if skipped:
             print(f"  → 输入内去重：跳过了 {skipped} 个重复项")
 
-    # --- 跟日历比对去重 ---
-    final_events = events
-    if sys.platform == "darwin":
-        print("  🔍 检查日历中是否有重复事件...")
+    final_events = all_events
+    if sys.platform == "darwin" and ics_events:
+        print("🔍 检查日历中是否有重复事件...")
         deduped = []
-        for event in events:
-            duplicate = False
-            if ics_events is not None:
-                duplicate = check_duplicate_via_ics(ics_events, event)
-            if duplicate:
+        for event in all_events:
+            if check_duplicate_via_ics(ics_events, event):
                 print(f"  ⏭️  「{event['title']}」{event['start_date']} 已存在，跳过")
             else:
                 deduped.append(event)
