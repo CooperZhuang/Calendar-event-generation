@@ -2,9 +2,13 @@
 from __future__ import annotations
 import json
 import os
+import select
 import subprocess
 import sys
 import tempfile
+import termios
+import time
+import tty
 from datetime import datetime, timedelta
 
 from .ai_parser import parse_with_ai
@@ -14,7 +18,6 @@ from .ics_utils import fetch_ics, unfold_ics, split_vevents, parse_ics_events, g
 from .parser import parse_input, parse_input_batch
 from .events import build_event, save_ics_file, print_preview, check_duplicate_via_ics, dedup_events_internal, import_to_calendar
 from .sync import sync_badminton_ics
-import subprocess, tempfile
 
 def _clipboard_has_image() -> bool:
     """检测剪贴板是否包含图片"""
@@ -95,8 +98,69 @@ def _cleanup_tmp(path: str):
         os.remove(path)
     except OSError:
         pass
+
+def _input_paste_aware(prompt):
+    """读取用户输入，同时监控剪贴板。
+
+    如果检测到剪贴板图片且用户尚未输入任何文字，立即返回 ("", True)。
+    否则等用户按回车后返回 (输入内容, False)。
+    """
+    print(prompt, end="", flush=True)
+
+    old = termios.tcgetattr(sys.stdin)
+    try:
+        tty.setraw(sys.stdin)
+        buffer = []
+        last_check = 0.0
+        while True:
+            now = time.time()
+            if now - last_check > 0.2:
+                last_check = now
+                if not buffer and _clipboard_has_image():
+                    sys.stdout.write("\r\n  \U0001f4cb 检测到剪贴板图片！\r\n")
+                    sys.stdout.flush()
+                    return ("", True)
+
+            r, _, _ = select.select([sys.stdin], [], [], 0.1)
+            if not r:
+                continue
+
+            ch = sys.stdin.read(1)
+            if ch in ("\r", "\n"):
+                sys.stdout.write("\r\n")
+                sys.stdout.flush()
+                break
+            elif ch == "\x03":
+                raise KeyboardInterrupt
+            elif ch == "\x04":
+                raise EOFError
+            elif ch in ("\x7f", "\x08"):
+                if buffer:
+                    buffer.pop()
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+            elif ch == "\x1b":
+                try:
+                    r2, _, _ = select.select([sys.stdin], [], [], 0.01)
+                    if r2:
+                        sys.stdin.read(1)
+                        r3, _, _ = select.select([sys.stdin], [], [], 0.01)
+                        if r3:
+                            sys.stdin.read(1)
+                except Exception:
+                    pass
+            elif ch.isprintable() or ch == "\t":
+                buffer.append(ch)
+                sys.stdout.write(ch)
+                sys.stdout.flush()
+    finally:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old)
+
+    return ("".join(buffer), False)
+
 
 def ai_mode():
+
     """AI-powered interactive mode: parse images or free-form text via AI.
 
     Accepts image file paths or pasted text. Events accumulate across
@@ -143,7 +207,11 @@ def ai_mode():
 
     while True:
         try:
-            raw = input("📋 图片/文本 > ").strip()
+            raw, paste_img = _input_paste_aware("📋 图片/文本 > ")
+            if paste_img:
+                raw = ":img"
+            else:
+                raw = raw.strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
