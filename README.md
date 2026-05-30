@@ -88,42 +88,42 @@ python3 main.py -i
 ```
 
 ## 🤖 AI 图片/文本解析
+### 方式一：`--ai` 内置模式（推荐）
 
-### 方式一：内置 `--ai` 模式（推荐）
-
-直接把图片或文本拖进程序，AI 自动提取日程：
+Cmd+V 粘贴截图，程序自动检测剪贴板并累积多张图片，确认后一次性 AI 解析生成 `.ics`：
 
 ```bash
 # 1. 配置 API Key
-cp .env.example .env
-# 编辑 .env，填入 OPENAI_API_KEY
+cp .env.example .env      # 编辑 .env，填入 OPENAI_API_KEY（兼容任意 OpenAI 接口）
 
 # 2. 安装依赖
 pip install openai
 
-# 3. 启动 AI 模式
+# 3. 启动
 python3 main.py --ai
 ```
-
-交互流程：
 
 ```
 🤖 AI 日程解析模式
 模型: gpt-4o | API: https://api.openai.com/v1
 
-图片: 拖入或输入文件路径（多张用英文逗号分隔）
-文本: 直接粘贴非结构化日程描述
-输入 'd' 完成并生成 .ics，输入 'q' 退出
+📋 图片/文本 > [Cmd+V 粘贴截图 → 自动检测并读取剪贴板]
+  📋 检测到剪贴板图片，读取中...
+  ✅ 已读取剪贴板图片 (324158 字节) [累计 1 张]
+  还要添加更多图片吗？[回车=添加 / n=解析生成ics]  [回车继续 Cmd+V]
 
-📋 图片/文本 > /path/to/screenshot.png
-⏳ 正在调用 AI 解析 (1 张图片)...
-✅ 解析到 1 个日程
+📋 图片/文本 > [Cmd+V 粘贴第二张]
+  ✅ 已读取剪贴板图片 (298401 字节) [累计 2 张]
+  还要添加更多图片吗？[回车=添加 / n=解析生成ics] n
+
+⏳ 正在调用 AI 解析 (2 张图片)...
+✅ 解析到 3 个日程
 
 📋 图片/文本 > d
 → .ics 已保存: schedule.ics
 ```
 
-> 兼容任意 OpenAI 兼容接口（DeepSeek、Qwen 等），通过 `OPENAI_BASE_URL` 和 `OPENAI_MODEL` 环境变量配置。解析纯文本无需视觉模型。
+也支持直接粘贴文本（非结构化日程描述）、输入文件路径。兼容 DeepSeek、Qwen 等任意 OpenAI 兼容接口。
 
 ### 方式二：手动复制 Prompt
 
