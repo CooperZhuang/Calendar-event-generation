@@ -34,9 +34,9 @@ def ai_mode():
     print(f"  模型: {model}")
     print(f"  API : {base_url}")
     print()
-    print("  图片: 拖入或输入文件路径（英文逗号分隔多张，回车确认）")
-    print("  文本: 直接粘贴日程描述（多行内容粘贴后补一个空行确认）")
-    print("  输入 'd' 完成并生成 .ics，输入 'q' 退出")
+    print("  图片: 拖入或输入文件路径（英文逗号分隔多张，回车确认，可多次添加后输入 d）")
+    print("  文本: 直接粘贴日程描述（多行粘贴后补一个空行，解析后即确认导入）")
+    print("  输入 'd' 立即生成 .ics，输入 'q' 退出")
     print("-" * 56)
     print()
 
@@ -139,6 +139,17 @@ def ai_mode():
             print_preview(event)
             all_events.append(event)
             print()
+
+        # 文本输入则直接确认，图片可继续添加
+        if text_input:
+            try:
+                confirm = input("  确认导入？[Y=生成ics / n=继续添加] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = "y"
+            if confirm in ("", "y", "yes"):
+                break
+            print()
+            continue
 
     if not all_events:
         print("👋 没有日程需要生成")
