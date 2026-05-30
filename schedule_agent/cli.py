@@ -2,7 +2,9 @@
 from __future__ import annotations
 import json
 import os
+import subprocess
 import sys
+import tempfile
 from datetime import datetime, timedelta
 
 from .ai_parser import parse_with_ai
@@ -12,6 +14,14 @@ from .ics_utils import fetch_ics, unfold_ics, split_vevents, parse_ics_events, g
 from .parser import parse_input, parse_input_batch
 from .events import build_event, save_ics_file, print_preview, check_duplicate_via_ics, dedup_events_internal, import_to_calendar
 from .sync import sync_badminton_ics
+
+def _cleanup_tmp(path: str):
+    """删除临时文件（忽略错误）"""
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
 def ai_mode():
     """AI-powered interactive mode: parse images or free-form text via AI.
 
@@ -34,9 +44,9 @@ def ai_mode():
     print(f"  模型: {model}")
     print(f"  API : {base_url}")
     print()
-    print("  图片: 拖入或输入文件路径（英文逗号分隔多张，回车确认，可多次添加后输入 d）")
-    print("  文本: 直接粘贴日程描述（多行粘贴后补一个空行，解析后即确认导入）")
-    print("  输入 'd' 立即生成 .ics，输入 'q' 退出")
+    print("  图片: :img 读剪贴板 / 拖入文件路径（英文逗号分隔多张，可多次添加后 d）")
+    print("  文本: 直接粘贴日程描述（多行粘贴后补空行，解析后即确认导入）")
+    print("  命令: :img 读剪贴板 | d 生成ics | q 退出")
     print("-" * 56)
     print()
 
@@ -73,6 +83,64 @@ def ai_mode():
                 print("⚠️  还没有收集到任何日程")
                 continue
             break
+
+        if raw.lower() == ":img":
+            # 从剪贴板读取图片
+            print("  📋 正在从剪贴板读取图片...")
+            try:
+                result = subprocess.run(
+                    ["osascript", "-e", "get the clipboard as «class PNGf»"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if result.returncode != 0 or not result.stdout.strip():
+                    print("  ❌ 剪贴板中没有图片")
+                    continue
+                hex_str = result.stdout.strip()
+                if not hex_str.startswith("«data PNGf"):
+                    print("  ❌ 剪贴板数据格式异常")
+                    continue
+                hex_data = hex_str[len("«data PNGf"):].rstrip("»")
+                img_bytes = bytes.fromhex(hex_data.replace(" ", ""))
+                tmp_path = os.path.join(tempfile.gettempdir(), f"codex_clipboard_{os.getpid()}.png")
+                with open(tmp_path, "wb") as f:
+                    f.write(img_bytes)
+                image_paths = [tmp_path]
+                print(f"  ✅ 已读取剪贴板图片 ({len(img_bytes)} 字节)")
+            except subprocess.TimeoutExpired:
+                print("  ❌ 读取剪贴板超时")
+                continue
+            except Exception as e:
+                print(f"  ❌ 读取剪贴板失败: {e}")
+                continue
+
+            print("⏳ 正在调用 AI 解析 (剪贴板图片)...")
+            try:
+                parsed = parse_with_ai(image_paths=image_paths)
+            except Exception as e:
+                print(f"  ❌ AI 解析失败: {e}")
+                _cleanup_tmp(tmp_path)
+                continue
+            _cleanup_tmp(tmp_path)
+
+            if not parsed:
+                print("  ⚠️  AI 未解析到任何日程")
+                continue
+
+            print(f"✅ 解析到 {len(parsed)} 个日程：\n")
+            for ev in parsed:
+                event = build_event(ev, locations)
+                print_preview(event)
+                all_events.append(event)
+                print()
+
+            try:
+                confirm = input("  确认导入？[Y=生成ics / n=继续添加] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = "y"
+            if confirm in ("", "y", "yes"):
+                break
+            print()
+            continue
 
         if not raw:
             continue
