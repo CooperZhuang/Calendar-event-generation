@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from .ai_parser import parse_with_ai
 from .config import CALENDAR_NAME, CONFIRM_BEFORE_IMPORT, ICS_OUTPUT_FILE, BADMINTON_ICS_FILE, CALENDAR_URL, LOCATIONS_JSON, _PROJECT_DIR
 from .locations import load_locations, update_locations_from_ics
-from .ics_utils import fetch_ics, split_vevents, parse_ics_events, generate_ics, generate_combined_ics
+from .ics_utils import fetch_ics, unfold_ics, split_vevents, parse_ics_events, generate_ics, generate_combined_ics
 from .parser import parse_input, parse_input_batch
 from .events import build_event, save_ics_file, print_preview, check_duplicate_via_ics, dedup_events_internal, import_to_calendar
 from .sync import sync_badminton_ics
@@ -345,4 +345,3 @@ def interactive_mode():
             print(f"  ⚠️  同步羽毛球订阅失败: {e}")
 
     print("\n  ✅ 完成！")
-

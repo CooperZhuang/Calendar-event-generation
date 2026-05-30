@@ -19,7 +19,7 @@ from schedule_agent.config import (
 )
 from schedule_agent.locations import load_locations, update_locations_from_ics
 from schedule_agent.ics_utils import (
-    fetch_ics, split_vevents, parse_ics_events, generate_ics, generate_combined_ics,
+    fetch_ics, unfold_ics, split_vevents, parse_ics_events, generate_ics, generate_combined_ics,
 )
 from schedule_agent.parser import parse_input, parse_input_batch
 from schedule_agent.events import (
@@ -79,7 +79,7 @@ def main():
                 print(f"  → 日历已是最新，无新地点")
 
             # 解析事件用于去重
-            ics_events = parse_ics_events(split_vevents(ics_text))
+            ics_events = parse_ics_events(split_vevents(unfold_ics(ics_text)))
             print(f"  → 共 {len(ics_events)} 个日历事件")
 
         except Exception as e:
