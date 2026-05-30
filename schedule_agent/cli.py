@@ -14,6 +14,47 @@ from .ics_utils import fetch_ics, unfold_ics, split_vevents, parse_ics_events, g
 from .parser import parse_input, parse_input_batch
 from .events import build_event, save_ics_file, print_preview, check_duplicate_via_ics, dedup_events_internal, import_to_calendar
 from .sync import sync_badminton_ics
+import subprocess, tempfile
+
+def _clipboard_has_image() -> bool:
+    """检测剪贴板是否包含图片"""
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", "get the clipboard as «class PNGf»"],
+            capture_output=True, text=True, timeout=3,
+        )
+        return result.returncode == 0 and result.stdout.strip().startswith("«data PNGf")
+    except Exception:
+        return False
+
+def _read_clipboard_image() -> str | None:
+    """从剪贴板读取图片，保存为临时 PNG，返回路径"""
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", "get the clipboard as «class PNGf»"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        hex_str = result.stdout.strip()
+        if not hex_str.startswith("«data PNGf"):
+            return None
+        hex_data = hex_str[len("«data PNGf"):].rstrip("»")
+        img_bytes = bytes.fromhex(hex_data.replace(" ", ""))
+        tmp_path = os.path.join(tempfile.gettempdir(), f"codex_clipboard_{os.getpid()}.png")
+        with open(tmp_path, "wb") as f:
+            f.write(img_bytes)
+        return tmp_path
+    except Exception:
+        return None
+
+def _cleanup_tmp(path: str):
+    """删除临时文件（忽略错误）"""
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
 
 
 def _clipboard_has_image() -> bool:
@@ -77,9 +118,9 @@ def ai_mode():
     print(f"  模型: {model}")
     print(f"  API : {base_url}")
     print()
-    print("  图片: 截图后直接回车 / :img / 拖入文件路径（英文逗号分隔多张）")
+    print("  图片: Cmd+V 粘贴截图 / 拖入文件路径（英文逗号分隔多张，可多次添加后 d）")
     print("  文本: 直接粘贴日程描述（多行粘贴后补空行，解析后即确认导入）")
-    print("  命令: :img 读剪贴板 | d 生成ics | q 退出")
+    print("  命令: d 生成ics | q 退出")
     print("-" * 56)
     print()
 
@@ -117,9 +158,18 @@ def ai_mode():
                 continue
             break
 
-        if raw.lower() == ":img" or (not raw and _clipboard_has_image()):
-            if not raw:
-                print("  📋 检测到剪贴板图片，自动读取...")
+        # ── 剪贴板图片粘贴检测 ──
+        if _clipboard_has_image():
+            raw_parts = [p.strip() for p in raw.split(",")]
+            is_paths = all(
+                "/" in p or "\\" in p or any(p.lower().endswith(ext)
+                for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".bmp"))
+                for p in raw_parts
+            ) if raw else False
+        else:
+            is_paths = False
+        if raw.lower() == ":img" or (not is_paths and raw.lower() not in ("q", "d") and _clipboard_has_image()):
+            print("  📋 检测到剪贴板图片，读取中...")
             # 从剪贴板读取图片
             tmp_path = _read_clipboard_image()
             if not tmp_path:
