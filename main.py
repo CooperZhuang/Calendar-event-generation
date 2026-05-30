@@ -43,8 +43,7 @@ def main():
         if not CALENDAR_URL:
             print("❌ 需要配置 CALENDAR_URL")
             sys.exit(1)
-        locations_data = load_locations()
-        badminton_kw = locations_data.get("badminton_keywords", ["羽毛球"])
+        badminton_kw = ["羽毛球", "羽球", "打球", "badminton", "Badminton"]
         try:
             print("🏸 正在同步羽毛球订阅日历...")
             count = sync_badminton_ics(CALENDAR_URL, badminton_kw, BADMINTON_ICS_FILE)
