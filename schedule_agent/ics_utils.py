@@ -2,7 +2,7 @@
 from __future__ import annotations
 import re
 import urllib.request
-import uuid
+import hashlib
 from datetime import datetime, timezone, timedelta
 def fetch_ics(url: str) -> str:
     """从 URL 获取 .ics 内容（支持 webcal:// 和 https://）"""
@@ -66,10 +66,11 @@ def _prop_value(line: str) -> str:
     return line[idx + 1:]
 
 def parse_ics_events(vevent_blocks: list[str]) -> list[dict]:
-    """解析 VEVENT 块列表，提取用于去重和地点发现的字段"""
+    """解析 VEVENT 块列表，提取用于去重、时间比较和地点发现的字段"""
     events = []
     for block in vevent_blocks:
-        event = {"summary": "", "date": "", "location": "", "structured_loc": ""}
+        event = {"summary": "", "date": "", "start_time": "", "end_time": "",
+                 "uid": "", "location": "", "structured_loc": ""}
 
         summary_line = _get_prop(block, "SUMMARY")
         if summary_line:
@@ -78,10 +79,23 @@ def parse_ics_events(vevent_blocks: list[str]) -> list[dict]:
         dtstart_line = _get_prop(block, "DTSTART")
         if dtstart_line:
             val = _prop_value(dtstart_line)
-            # 提取日期部分：YYYYMMDD 或 YYYYMMDDTHHMMSS
-            m = re.match(r"(\d{4})(\d{2})(\d{2})", val)
+            # 提取日期 + 可选时间：YYYYMMDD 或 YYYYMMDDTHHMMSS[Z]
+            m = re.match(r"(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})Z?)?", val)
             if m:
                 event["date"] = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+                if m.group(4) and m.group(5):
+                    event["start_time"] = f"{m.group(4)}:{m.group(5)}"
+
+        dtend_line = _get_prop(block, "DTEND")
+        if dtend_line:
+            val = _prop_value(dtend_line)
+            m = re.match(r"(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})Z?)?", val)
+            if m and m.group(4) and m.group(5):
+                event["end_time"] = f"{m.group(4)}:{m.group(5)}"
+
+        uid_line = _get_prop(block, "UID")
+        if uid_line:
+            event["uid"] = _prop_value(uid_line)
 
         loc_line = _get_prop(block, "LOCATION")
         if loc_line:
@@ -131,7 +145,8 @@ def _generate_vevent(event: dict) -> list[str]:
             f"DTEND;TZID=Asia/Shanghai:{et}",
         ]
 
-    uid = str(uuid.uuid4()).upper()
+    uid_hash = f"{event['title']}|{event['start_date']}"
+    uid = hashlib.sha1(uid_hash.encode()).hexdigest()[:16] + "@schedule-agent"
     now = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
     lines = [

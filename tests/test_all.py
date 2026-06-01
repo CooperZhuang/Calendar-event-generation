@@ -186,19 +186,22 @@ check(build_event(parse_input("标题：团建\n时间：2026-06-01 18:00-20:00"
 
 # ─── 13. 去重检测（含归一化） ───
 print("\n── 去重检测 ──")
-# 精确匹配
+# 精确匹配（无时间字段 → 默认空字符串，视为一致）
 events = [
     {"date": "2026-06-01", "summary": "羽毛球"},
     {"date": "2026-06-02", "summary": "团建"},
 ]
 e = {"start_date": "2026-06-01", "title": "羽毛球"}
-check(check_duplicate_via_ics(events, e) is True, "精确匹配 → 重复")
+status, _ = check_duplicate_via_ics(events, e)
+check(status == "identical", "精确匹配 → identical")
 
 e = {"start_date": "2026-06-03", "title": "羽毛球"}
-check(check_duplicate_via_ics(events, e) is False, "日期不同 → 不重复")
+status, _ = check_duplicate_via_ics(events, e)
+check(status == "new", "日期不同 → new")
 
 e = {"start_date": "2026-06-01", "title": "聚餐"}
-check(check_duplicate_via_ics(events, e) is False, "标题不同 → 不重复")
+status, _ = check_duplicate_via_ics(events, e)
+check(status == "new", "标题不同 → new")
 
 # 归一化匹配
 events2 = [
@@ -206,10 +209,26 @@ events2 = [
     {"date": "2026-06-02", "summary": "打羽毛球"},
 ]
 e = {"start_date": "2026-06-01", "title": "羽毛球"}
-check(check_duplicate_via_ics(events2, e) is True, "羽毛球 vs 羽毛球活动 → 重复")
+status, _ = check_duplicate_via_ics(events2, e)
+check(status == "identical", "羽毛球 vs 羽毛球活动 → identical")
 
 e = {"start_date": "2026-06-02", "title": "羽毛球"}
-check(check_duplicate_via_ics(events2, e) is True, "羽毛球 vs 打羽毛球 → 重复")
+status, _ = check_duplicate_via_ics(events2, e)
+check(status == "identical", "羽毛球 vs 打羽毛球 → identical")
+
+# 时间变更检测
+events3 = [
+    {"date": "2026-06-01", "summary": "羽毛球", "start_time": "18:00", "end_time": "19:00"},
+]
+e = {"start_date": "2026-06-01", "title": "羽毛球", "start_time": "18:00", "end_time": "22:00"}
+status, matched = check_duplicate_via_ics(events3, e)
+check(status == "update", "时间不同 → update")
+check(matched is not None and matched["start_time"] == "18:00", "返回匹配的旧事件含原时间")
+
+# 时间完全一致
+e2 = {"start_date": "2026-06-01", "title": "羽毛球", "start_time": "18:00", "end_time": "19:00"}
+status2, _ = check_duplicate_via_ics(events3, e2)
+check(status2 == "identical", "时间一致 → identical")
 
 # ─── 14. 输入内部去重 ───
 print("\n── 输入内部去重 ──")

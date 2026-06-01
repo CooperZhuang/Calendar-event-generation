@@ -144,12 +144,18 @@ def main():
         print("🔍 检查日历中是否有重复事件...")
         deduped = []
         for event in events:
-            duplicate = False
             if ics_events is not None:
-                duplicate = check_duplicate_via_ics(ics_events, event)
+                status, matched = check_duplicate_via_ics(ics_events, event)
+            else:
+                status, matched = "new", None
 
-            if duplicate:
+            if status == "identical":
                 print(f"  ⏭️  「{event['title']}」{event['start_date']} 已存在，跳过")
+            elif status == "update":
+                old_start = matched.get("start_time", "?")
+                old_end = matched.get("end_time", "?")
+                print(f"  🔄 「{event['title']}」{event['start_date']} 时间变更: {old_start}~{old_end} → {event['start_time']}~{event['end_time']}")
+                deduped.append(event)
             else:
                 deduped.append(event)
         final_events = deduped

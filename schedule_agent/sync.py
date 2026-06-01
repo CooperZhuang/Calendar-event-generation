@@ -36,8 +36,8 @@ def sync_badminton_ics(calendar_url: str, badminton_kw: list[str],
         "METHOD:PUBLISH",
         "X-WR-CALNAME:羽毛球活动",
         "X-WR-CALDESC:羽毛球活动订阅日历",
-        "REFRESH-INTERVAL;VALUE=DURATION:PT12H",
-        f"X-PUBLISHED-TTL:PT12H",
+        "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
+        f"X-PUBLISHED-TTL:PT1H",
     ]
     for block in matched_blocks:
         lines.append(block)

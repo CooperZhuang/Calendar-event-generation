@@ -81,14 +81,27 @@ def print_preview(event: dict):
     print("=" * 50)
     print()
 
-def check_duplicate_via_ics(events: list[dict], target: dict) -> bool:
-    """通过已解析的 .ics 事件列表检查重复（标题归一化后比较）"""
+def check_duplicate_via_ics(events: list[dict], target: dict) -> tuple[str, dict | None]:
+    """对照已解析的 .ics 事件列表检查重复 / 时间变更
+
+    Returns:
+        ("identical", matched_event) — 日期+标题+时间完全一致，跳过
+        ("update", matched_event)     — 日期+标题一致但时间不同，需要更新
+        ("new", None)                 — 无匹配，全新事件
+    """
     target_date = target["start_date"]
     target_norm = _normalize_title(target["title"])
+    target_start = target.get("start_time", "")
+    target_end = target.get("end_time", "")
     for ev in events:
         if ev["date"] == target_date and _normalize_title(ev["summary"]) == target_norm:
-            return True
-    return False
+            ev_start = ev.get("start_time", "")
+            ev_end = ev.get("end_time", "")
+            if ev_start == target_start and ev_end == target_end:
+                return ("identical", ev)
+            else:
+                return ("update", ev)
+    return ("new", None)
 
 def dedup_events_internal(events: list[dict]) -> list[dict]:
     """去除输入事件列表内部的重复项（同一天 + 同标题归一化）"""
