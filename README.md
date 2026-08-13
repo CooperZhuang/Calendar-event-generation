@@ -4,18 +4,13 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![许可证](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-结构化日程文本 / JSON → `.ics` 日历事件，一键导入 Apple / Google / Outlook 日历。
+AI 日程解析 → `.ics` 日历事件，一键导入 Apple / Google / Outlook 日历。
 
 ## 为什么有这个项目
 
 日常收到大量碎片化的日程信息——微信群截图、活动海报、邮件通知、订场确认。手动录入日历又慢又容易出错，尤其是场馆地址要在 Apple Maps 里手动搜索定位，每次都得反复放大缩小确认。
 
-这个项目把流程拆成两步：
-
-1. **📸 图片/OCR → 结构化 JSON** — 把截图发给任意支持视觉的 AI，用下方的 [Prompt](#图片ocr--json-prompt) 一键提取为标准 JSON
-2. **📅 JSON → .ics 日历文件** — 把 JSON 喂给 `main.py`，自动生成带精确地图坐标的 `.ics`，双击即可导入系统日历
-
-或者更简单——直接用内置的 `--ai` 模式，一步到位。
+现在只需要一步——把截图 Cmd+V 粘贴进内置 AI 模式，自动完成「识图 → 提取日程 → 生成带精确地图坐标的 `.ics` → 导入系统日历」。
 
 ## 快速开始
 
@@ -23,109 +18,54 @@
 git clone https://github.com/CooperZhuang/calendar-event-generation.git
 cd calendar-event-generation
 
-# 文本输入
-python3 main.py "标题：羽毛球
-开始日期：2026-06-07
-开始时间：14:00
-结束日期：2026-06-07
-结束时间：16:00
-地点：上海奥埔篮羽运动中心
-描述：费用：¥34"
+# 1. 配置 API Key
+cp .env.example .env      # 编辑 .env，填入 OPENAI_API_KEY（兼容任意 OpenAI 接口）
 
-# JSON 输入
-python3 main.py << 'EOF'
-[
-  {
-    "title": "项目周会",
-    "start_date": "2026-06-15",
-    "start_time": "09:00",
-    "end_date": "2026-06-15",
-    "end_time": "10:00",
-    "location_name": "3号会议室",
-    "description": "本周进度同步"
-  }
-]
-EOF
+# 2. 安装依赖
+pip install openai        # 或直接双击运行 run_ai.sh，自动完成环境准备
 
-# 交互式问答
-python3 main.py -i
+# 3. 启动（默认 AI 模式）
+python3 main.py
 ```
+
+macOS 上也可直接双击项目根目录的 `run_ai.sh`，自动进入 AI 模式。
 
 > Python ≥ 3.11。macOS 可直接导入日历应用；其他平台输出 `.ics` 文件。
 
 ## 特性
+- **AI 识图解析** — Cmd+V 粘贴截图/海报/订场确认，自动提取日程；兼容任意 OpenAI 接口（DeepSeek、Qwen 等）
+- **多图累积** — 可连续粘贴多张图片，确认后一次性解析
 - **智能地点匹配** — 预设场馆数据库，模糊匹配 + Apple Maps 精确定位
-- **灵活时间解析** — 中文日期、相对日期（明天/本周五）、全天事件、自动跨天
-- **双重去重** — 输入内部去重 + iCloud 日历交叉比对
-- **标题归一化** — "羽毛球活动""打羽毛球" → "羽毛球"
 - **自动发现新地点** — iCloud 事件中未知场馆自动提取入库
+- **双重去重** — 输入内部去重 + iCloud 日历交叉比对
+- **标题归一化** — "羽毛球活动""打羽毛球" → "羽毛球"；AI 误把场馆名当标题时自动纠正
+- **退款过滤** — AI 识别到"已退款"的日程自动忽略
 ## 运行流程
 
 ```mermaid
 flowchart TD
-    A["启动"] --> B{"运行模式"}
-
-    B -->|"python3 main.py"| C["📋 加载场馆数据库"]
-    C --> D["📡 拉取 iCloud 日历"]
-    D --> E{"发现新场馆？"}
-    E -->|是| F["写入 locations.json"]
-    E -->|否| G["解析用户输入"]
-    F --> G
-    G --> H["🔍 地点模糊匹配"]
-    H --> I["🕐 时间解析 / 跨天推算"]
-    I --> J["🏷️ 标题归一化"]
-    J --> K["🔁 内部去重"]
-    K --> L["🔁 iCloud 交叉比对去重"]
-    L --> M["👀 预览确认"]
-    M --> N["💾 生成 .ics"]
-    N --> O{"macOS？"}
-    O -->|是| P["📲 导入系统日历"]
-    O -->|否| Q["📄 仅输出 .ics 文件"]
-    P --> R["🏸 同步羽毛球订阅"]
-    Q --> R
-    R --> Z["✅ 完成"]
-
-    B -->|"python3 main.py --ai"| A1["🤖 交互式输入"]
+    A["启动 (python3 main.py)"] --> A1["🤖 交互式输入"]
     A1 --> A2["Cmd+V 粘贴截图 / 输入文本"]
     A2 --> A3{"确认解析？"}
-    A3 -->|是| A4["📡 调用 OpenAI 兼容 API"]
     A3 -->|继续添加| A2
+    A3 -->|是| A4["📡 调用 OpenAI 兼容 API"]
     A4 --> A5["📤 提取 JSON"]
-    A5 --> H
-
-    B -->|"python3 main.py --sync-badminton"| S1["📡 拉取 iCloud 日历"]
-    S1 --> S2["🔎 羽毛球关键字筛选"]
-    S2 --> S3["💾 生成 badminton.ics"]
-    S3 --> S4{"CI 环境？"}
-    S4 -->|是| S5["⬆️ 推送 Secret Gist"]
-    S4 -->|否| Z
-    S5 --> Z
-```
-
-## 输入格式
-
-文本标签与 JSON 字段一一对应，中英文标签均可：
-
-| 标签 | JSON | 示例 |
-|------|------|------|
-| `标题：` | `title` | `羽毛球` |
-| `开始日期：` | `start_date` | `2026-06-07` |
-| `开始时间：` | `start_time` | `14:00` |
-| `结束日期：` | `end_date` | `2026-06-07` |
-| `结束时间：` | `end_time` | `16:00` |
-| `地点：` | `location_name` | `上海奥埔篮羽运动中心` |
-| `地址：` | `address` | 辅助地点匹配 |
-| `描述：` | `description` | 自由文本，支持多行 |
-| `全天：` | `is_all_day` | `true` / `false` |
-
-**便捷写法：** `时间：明天 14:00 - 16:00` 替代四个日期时间字段，自动解析中文日期（6月7日）、相对日期、跨天（22:00 - 02:00）。
-
-`描述：` 之后的行持续捕获直到下一个字段或输入结束：
-
-```
-描述：费用：¥34
-人数：男1 女1
-场地：6号
+    A5 --> B["📋 加载场馆数据库"]
+    B --> C["📡 拉取 iCloud 日历"]
+    C --> D{"发现新场馆？"}
+    D -->|是| E["写入 locations.json"]
+    D -->|否| F["🔍 地点模糊匹配"]
+    E --> F
+    F --> G["🏷️ 标题归一化 + 场馆名纠错"]
+    G --> H["🔁 内部去重"]
+    H --> I["🔁 iCloud 交叉比对去重"]
+    I --> J["👀 预览确认"]
+    J --> K["💾 生成 .ics"]
+    K --> L{"macOS？"}
+    L -->|是| M["📲 导入系统日历"]
+    L -->|否| N["📄 仅输出 .ics 文件"]
+    M --> Z["✅ 完成"]
+    N --> Z
 ```
 
 ## 🤖 AI 图片/文本解析
@@ -140,8 +80,8 @@ cp .env.example .env      # 编辑 .env，填入 OPENAI_API_KEY（兼容任意 O
 # 2. 安装依赖
 pip install openai
 
-# 3. 启动
-python3 main.py --ai
+# 3. 启动（默认 AI 模式；macOS 可直接双击 run_ai.sh）
+python3 main.py
 ```
 
 ```
@@ -190,7 +130,7 @@ python3 main.py --ai
 # 输出 JSON 格式
 
 [{
-  "title": "字符串，事件主体/标题名称。如果原始文本没有明确标题，请根据内容提炼一个简短、概括性的标题，绝不留空",
+  "title": "字符串，活动本身的名称或类型（如 \"羽毛球\"、\"同学聚会\"、\"部门周会\"）。严禁使用地点、场馆、商户名称作为标题；若没有明确活动名，请根据内容推断活动类型作为标题，绝不留空",
   "start_date": "YYYY-MM-DD 格式。若输入无显式年份，则默认使用 `# 上下文基准` 中的年份",
   "start_time": "HH:MM 格式，24小时制。若是全天活动，设为空字符串 \"\"",
   "end_date": "YYYY-MM-DD 格式。跨天事件需根据时间差自动计算并调整日期",
@@ -229,25 +169,21 @@ python3 main.py --ai
 ## 6. 特殊状态
 
 - 如果提到已退款，则应该忽略跳过，不要输出这部分
+
+## 7. 标题提取规则（核心）
+
+- 标题必须代表"活动本身"的名称或类型，例如：羽毛球、同学聚会、部门周会、看牙医。
+
+- 严禁将地点/场馆/商户/餐厅等场所名称用作标题（如"奥埔篮羽运动中心"、"海底捞火锅"均属非法标题）。
+
+- 若原文没有明确活动名，根据内容推断活动类型作为标题：场地是羽毛球馆 → 标题为"羽毛球"；餐厅聚会 → 标题为"聚餐"。
+
+- 标题保持简短（2~8 字为宜），不得包含时间、地址等非标题信息。
 ```
 
 </details>
 
-将 Prompt 中的 `{{CURRENT_TIME}}` 替换为当日日期（如 `2026-05-28 Wednesday`），与截图一起发给 AI，将返回的 JSON 保存后运行：
-
-```bash
-cat event.json | python3 main.py
-```
-
-## 羽毛球订阅
-
-CI 每 6 小时从 iCloud 拉取日历，按关键字匹配羽毛球活动，生成 `badminton.ics` 推送至 Secret Gist。Gist 不被索引、不可搜索——仅持有完整链接者可订阅。
-
-```bash
-python3 main.py --sync-badminton   # 手动触发
-```
-
-订阅者将 Gist raw URL 添加至日历应用即可，每 12 小时自动刷新。
+将 Prompt 中的 `{{CURRENT_TIME}}` 替换为当日日期（如 `2026-05-28 Wednesday`），与截图一起发给 AI。将返回的 JSON 直接粘贴进 `python3 main.py` 的 AI 模式文本输入，或手动核对后使用。
 
 ## 配置
 
@@ -260,39 +196,28 @@ cp .env.example .env
 | 变量 | 说明 | 必填 |
 |------|------|------|
 | `CALENDAR_URL` | iCloud 日历发布链接（去重 + 发现新地点） | 否 |
-| `OPENAI_API_KEY` | AI 解析 API Key | `--ai` 模式下必填 |
+| `OPENAI_API_KEY` | AI 解析 API Key | 必填 |
 | `OPENAI_BASE_URL` | 兼容接口地址，默认 `https://api.openai.com/v1` | 否 |
 | `OPENAI_MODEL` | 模型名，默认 `gpt-4o` | 否 |
 
-CI Secrets（GitHub Actions）：
-
-| Secret | 说明 |
-|--------|------|
-| `CALENDAR_URL` | iCloud 日历发布链接 |
-| `GIST_TOKEN` | GitHub PAT（`gist` 权限） |
-| `GIST_ID` | Secret Gist ID |
-
 ## 项目结构
 ```
-main.py                        # CLI 入口
+main.py                        # AI 模式入口
+run_ai.sh                      # 一键启动脚本（macOS 双击运行）
 schedule_agent/                # 核心包
 ├── __init__.py
-├── ai_parser.py               # AI 图片/文本解析
-├── cli.py                     # 命令行处理
+├── ai_parser.py               # AI 图片/文本解析（OpenAI 兼容接口）
+├── cli.py                     # AI 交互模式（剪贴板检测、多图累积）
 ├── config.py                  # 环境变量读取
-├── events.py                  # 事件模型
+├── events.py                  # 事件构建、标题纠错、去重、日历导入
 ├── ics_utils.py               # ICS 文件生成
-├── locations.py               # 场馆坐标匹配
-├── parser.py                  # 文本解析
-└── sync.py                    # iCloud 日历同步
+└── locations.py               # 场馆坐标匹配、自动发现新地点
 data/
 └── locations.json             # 场馆数据库
 tests/
-├── test_all.py                # 83 项测试
+├── test_all.py                # 63 项测试
 └── fixtures/schedule.json
 .env.example                   # 配置文件模板
-.github/workflows/
-└── sync-badminton.yml         # 每 6h 同步
 ```
 
 ## License

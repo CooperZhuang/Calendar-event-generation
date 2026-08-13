@@ -2,25 +2,77 @@
 from __future__ import annotations
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timedelta
 
-from .config import ICS_OUTPUT_FILE, CALENDAR_NAME, CONFIRM_BEFORE_IMPORT, CALENDAR_URL, LOCATIONS_JSON, _PROJECT_DIR
+from .config import (
+    ICS_OUTPUT_FILE, CALENDAR_NAME, CONFIRM_BEFORE_IMPORT, CALENDAR_URL,
+    LOCATIONS_JSON, _PROJECT_DIR, BADMINTON_KEYWORDS, BADMINTON_VENUES,
+)
 from .locations import match_location
-from .parser import _normalize_title
 from .ics_utils import generate_ics
+
+def _normalize_title(title: str) -> str:
+    """统一标题用于去重比较（羽毛球活动 → 羽毛球）"""
+    if any(kw in title for kw in BADMINTON_KEYWORDS):
+        return "羽毛球"
+    return title
+
+def _norm_text(s: str) -> str:
+    """去空格 + 小写，用于场馆名比较（忽略大小写/空格差异）"""
+    return re.sub(r"\s+", "", s or "").lower()
+
+def _is_badminton_venue(raw_venue: str) -> bool:
+    """判断地点是否与羽毛球相关（关键字 + 常去球馆名单）"""
+    t = _norm_text(raw_venue)
+    if not t:
+        return False
+    if any(_norm_text(kw) in t for kw in BADMINTON_KEYWORDS):
+        return True
+    return any(t == _norm_text(v) or _norm_text(v) in t for v in BADMINTON_VENUES)
+
+def _title_looks_like_venue(title: str, locations: list[dict], raw_venue: str) -> bool:
+    """标题是否被地点/场馆名污染（AI 把场馆名当成了标题）"""
+    t = _norm_text(title)
+    if not t:
+        return False
+    if raw_venue and t == _norm_text(raw_venue):
+        return True
+    for loc in locations:
+        name = _norm_text(loc.get("name") or "")
+        if not name:
+            continue
+        if t == name or (len(t) >= 2 and (t in name or name in t)):
+            return True
+    return False
+
+def _infer_title(raw_venue: str, description: str, fallback: str) -> str:
+    """标题被场馆名污染时，根据地点/描述推断活动类型标题"""
+    if _is_badminton_venue(f"{raw_venue} {description}"):
+        return "羽毛球"
+    return fallback
+
 def build_event(raw: dict, locations: list[dict]) -> dict:
     """加工解析结果为最终事件数据（含地点匹配）
 
     Args:
-        raw: parse_input() 返回的原始解析结果
+        raw: AI 解析返回的原始日程 dict
         locations: 地点配置列表
 
     Returns:
         含 location_matched 等扩展字段的事件 dict
     """
     title = _normalize_title(raw["title"])
+
+    # --- 标题兜底：AI 可能把场馆名当标题，改回活动类型 ---
+    if title and _title_looks_like_venue(title, locations, raw.get("_raw_venue", "")):
+        title = _infer_title(
+            raw.get("_raw_venue", ""),
+            raw.get("description", ""),
+            fallback=title,
+        )
 
     # --- 地点识别 ---
     matched = match_location(
