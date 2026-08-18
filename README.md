@@ -6,11 +6,13 @@
 
 AI 日程解析 → `.ics` 日历事件，一键导入 Apple / Google / Outlook 日历。
 
+支持 **macOS / Windows** 双平台：macOS 可直接导入系统日历；Windows 生成 `.ics` 后上传到 iCloud 网页版 / Outlook 等。
+
 ## 为什么有这个项目
 
 日常收到大量碎片化的日程信息——微信群截图、活动海报、邮件通知、订场确认。手动录入日历又慢又容易出错，尤其是场馆地址要在 Apple Maps 里手动搜索定位，每次都得反复放大缩小确认。
 
-现在只需要一步——把截图 Cmd+V 粘贴进内置 AI 模式，自动完成「识图 → 提取日程 → 生成带精确地图坐标的 `.ics` → 导入系统日历」。
+现在只需要一步——把截图 Cmd+V / Ctrl+V 粘贴进内置 AI 模式，自动完成「识图 → 提取日程 → 生成带精确地图坐标的 `.ics` → 导入系统日历」。
 
 ## 快速开始
 
@@ -28,12 +30,23 @@ pip install openai        # 或直接双击运行 run_ai.sh，自动完成环境
 python3 main.py
 ```
 
-macOS 上也可直接双击项目根目录的 `run_ai.sh`，自动进入 AI 模式。
+**macOS**：可直接双击项目根目录的 `run_ai.sh`，自动进入 AI 模式。
 
-> Python ≥ 3.11。macOS 可直接导入日历应用；其他平台输出 `.ics` 文件。
+**Windows**：
+
+```powershell
+# 2. 安装依赖（使用项目自带 venv）
+.venv\Scripts\python.exe -m pip install openai
+# 或直接双击运行 run_ai.sh（自动完成环境准备）
+
+# 3. 启动
+.venv\Scripts\python.exe main.py
+```
+
+> Python ≥ 3.11。macOS 可直接导入日历应用；Windows 生成 `.ics` 文件，可在 iCloud 网页版（日历 → 设置 → 导入日历）或 Outlook 中导入。
 
 ## 特性
-- **AI 识图解析** — Cmd+V 粘贴截图/海报/订场确认，自动提取日程；兼容任意 OpenAI 接口（DeepSeek、Qwen 等）
+- **AI 识图解析** — Ctrl+V（macOS: Cmd+V）粘贴截图/海报/订场确认，自动提取日程；兼容任意 OpenAI 接口（DeepSeek、Qwen 等）
 - **多图累积** — 可连续粘贴多张图片，确认后一次性解析
 - **智能地点匹配** — 预设场馆数据库，模糊匹配 + Apple Maps 精确定位
 - **自动发现新地点** — iCloud 事件中未知场馆自动提取入库
@@ -45,7 +58,7 @@ macOS 上也可直接双击项目根目录的 `run_ai.sh`，自动进入 AI 模�
 ```mermaid
 flowchart TD
     A["启动 (python3 main.py)"] --> A1["🤖 交互式输入"]
-    A1 --> A2["Cmd+V 粘贴截图 / 输入文本"]
+    A1 --> A2["Ctrl+V / Cmd+V 粘贴截图 / 输入文本"]
     A2 --> A3{"确认解析？"}
     A3 -->|继续添加| A2
     A3 -->|是| A4["📡 调用 OpenAI 兼容 API"]
@@ -63,7 +76,7 @@ flowchart TD
     J --> K["💾 生成 .ics"]
     K --> L{"macOS？"}
     L -->|是| M["📲 导入系统日历"]
-    L -->|否| N["📄 仅输出 .ics 文件"]
+    L -->|否| N["📄 输出 .ics 文件（Windows 可上传 iCloud / Outlook）"]
     M --> Z["✅ 完成"]
     N --> Z
 ```
@@ -71,7 +84,7 @@ flowchart TD
 ## 🤖 AI 图片/文本解析
 ### 方式一：`--ai` 内置模式（推荐）
 
-Cmd+V 粘贴截图，程序自动检测剪贴板并累积多张图片，确认后一次性 AI 解析生成 `.ics`：
+Ctrl+V（macOS: Cmd+V）粘贴截图，程序自动检测剪贴板并累积多张图片，确认后一次性 AI 解析生成 `.ics`：
 
 ```bash
 # 1. 配置 API Key
@@ -80,7 +93,7 @@ cp .env.example .env      # 编辑 .env，填入 OPENAI_API_KEY（兼容任意 O
 # 2. 安装依赖
 pip install openai
 
-# 3. 启动（默认 AI 模式；macOS 可直接双击 run_ai.sh）
+# 3. 启动（默认 AI 模式；macOS 可直接双击 run_ai.sh；Windows 用 .venv\Scripts\python.exe main.py）
 python3 main.py
 ```
 
@@ -88,12 +101,12 @@ python3 main.py
 🤖 AI 日程解析模式
 模型: gpt-4o | API: https://api.openai.com/v1
 
-📋 图片/文本 > [Cmd+V 粘贴截图 → 自动检测并读取剪贴板]
+📋 图片/文本 > [Ctrl+V 粘贴截图 → 自动检测并读取剪贴板]
   📋 检测到剪贴板图片，读取中...
   ✅ 已读取剪贴板图片 (324158 字节) [累计 1 张]
-  还要添加更多图片吗？[回车=添加 / n=解析生成ics]  [回车继续 Cmd+V]
+  还要添加更多图片吗？[回车=添加 / n=解析生成ics]  [回车继续 Ctrl+V]
 
-📋 图片/文本 > [Cmd+V 粘贴第二张]
+📋 图片/文本 > [Ctrl+V 粘贴第二张]
   ✅ 已读取剪贴板图片 (298401 字节) [累计 2 张]
   还要添加更多图片吗？[回车=添加 / n=解析生成ics] n
 
@@ -203,7 +216,7 @@ cp .env.example .env
 ## 项目结构
 ```
 main.py                        # AI 模式入口
-run_ai.sh                      # 一键启动脚本（macOS 双击运行）
+run_ai.sh                      # 一键启动脚本（macOS 双击运行；Windows 用 .venv\Scripts\python.exe main.py）
 schedule_agent/                # 核心包
 ├── __init__.py
 ├── ai_parser.py               # AI 图片/文本解析（OpenAI 兼容接口）

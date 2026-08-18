@@ -1,14 +1,19 @@
 # AI 命令行交互模式
 from __future__ import annotations
+import base64
 import itertools
 import os
-import select
 import subprocess
 import sys
 import tempfile
-import termios
 import time
-import tty
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    import select
+    import termios
+    import tty
 
 from .ai_parser import parse_with_ai
 from .config import CALENDAR_URL, LOCATIONS_JSON
@@ -19,31 +24,50 @@ from .events import build_event, save_ics_file, print_preview, check_duplicate_v
 # 每次剪贴板读取使用唯一的临时文件名，避免多张图片互相覆盖（修复：多图只采用最后一张的 bug）
 _clip_seq = itertools.count(1)
 
+def _clipboard_png_bytes() -> bytes | None:
+    """从剪贴板读取 PNG 字节；剪贴板无图片时返回 None。"""
+    try:
+        if sys.platform == "win32":
+            ps = (
+                "Add-Type -AssemblyName System.Windows.Forms; "
+                "if ([System.Windows.Forms.Clipboard]::ContainsImage()) { "
+                "$img = [System.Windows.Forms.Clipboard]::GetImage(); "
+                "$ms = New-Object System.IO.MemoryStream; "
+                "$img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); "
+                "[Convert]::ToBase64String($ms.ToArray()) }"
+            )
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return None
+            return base64.b64decode(result.stdout.strip())
+        else:
+            result = subprocess.run(
+                ["osascript", "-e", "get the clipboard as «class PNGf»"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                return None
+            hex_str = result.stdout.strip()
+            if not hex_str.startswith("«data PNGf"):
+                return None
+            hex_data = hex_str[len("«data PNGf"):].rstrip("»")
+            return bytes.fromhex(hex_data.replace(" ", ""))
+    except Exception:
+        return None
+
 def _clipboard_has_image() -> bool:
     """检测剪贴板是否包含图片"""
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", "get the clipboard as «class PNGf»"],
-            capture_output=True, text=True, timeout=3,
-        )
-        return result.returncode == 0 and result.stdout.strip().startswith("«data PNGf")
-    except Exception:
-        return False
+    return _clipboard_png_bytes() is not None
 
 def _read_clipboard_image() -> str | None:
     """从剪贴板读取图片，保存为临时 PNG，返回路径"""
     try:
-        result = subprocess.run(
-            ["osascript", "-e", "get the clipboard as «class PNGf»"],
-            capture_output=True, text=True, timeout=10,
-        )
-        if result.returncode != 0 or not result.stdout.strip():
+        img_bytes = _clipboard_png_bytes()
+        if not img_bytes:
             return None
-        hex_str = result.stdout.strip()
-        if not hex_str.startswith("«data PNGf"):
-            return None
-        hex_data = hex_str[len("«data PNGf"):].rstrip("»")
-        img_bytes = bytes.fromhex(hex_data.replace(" ", ""))
         tmp_path = os.path.join(tempfile.gettempdir(), f"codex_clipboard_{os.getpid()}_{next(_clip_seq)}.png")
         with open(tmp_path, "wb") as f:
             f.write(img_bytes)
@@ -61,10 +85,20 @@ def _cleanup_tmp(path: str):
 def _clear_clipboard():
     """清空剪贴板"""
     try:
-        subprocess.run(
-            ["osascript", "-e", 'set the clipboard to ""'],
-            capture_output=True, timeout=3,
-        )
+        if sys.platform == "win32":
+            ps = (
+                "Add-Type -AssemblyName System.Windows.Forms; "
+                "[System.Windows.Forms.Clipboard]::Clear()"
+            )
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps],
+                capture_output=True, timeout=3,
+            )
+        else:
+            subprocess.run(
+                ["osascript", "-e", 'set the clipboard to ""'],
+                capture_output=True, timeout=3,
+            )
     except Exception:
         pass
 
@@ -76,6 +110,13 @@ def _input_paste_aware(prompt):
     """
     print(prompt, end="", flush=True)
 
+    if sys.platform == "win32":
+        return _input_paste_aware_windows()
+    return _input_paste_aware_posix()
+
+
+def _input_paste_aware_posix():
+    """POSIX 实现：termios/tty 原始模式 + select 轮询剪贴板。"""
     old = termios.tcgetattr(sys.stdin)
     try:
         tty.setraw(sys.stdin)
@@ -128,6 +169,52 @@ def _input_paste_aware(prompt):
     return ("".join(buffer), False)
 
 
+def _input_paste_aware_windows():
+    """Windows 实现：msvcrt 逐字符读取 + 轮询剪贴板。"""
+    buffer = []
+    last_check = 0.0
+    while True:
+        now = time.time()
+        if now - last_check > 0.2:
+            last_check = now
+            if not buffer and _clipboard_has_image():
+                sys.stdout.write("\r\n  \U0001f4cb 检测到剪贴板图片！\r\n")
+                sys.stdout.flush()
+                return ("", True)
+
+        if not msvcrt.kbhit():
+            continue
+
+        ch = msvcrt.getwch()
+        if ch in ("\r", "\n"):
+            sys.stdout.write("\r\n")
+            sys.stdout.flush()
+            break
+        elif ch == "\x03":
+            raise KeyboardInterrupt
+        elif ch == "\x04":
+            raise EOFError
+        elif ch in ("\x7f", "\x08"):
+            if buffer:
+                buffer.pop()
+                sys.stdout.write("\b \b")
+                sys.stdout.flush()
+        elif ch in ("\x1b", "\xe0", "\x00"):
+            # 方向键/功能键等转义序列，丢弃后续字符
+            try:
+                for _ in range(2):
+                    if msvcrt.kbhit():
+                        msvcrt.getwch()
+            except Exception:
+                pass
+        elif ch.isprintable() or ch == "\t":
+            buffer.append(ch)
+            sys.stdout.write(ch)
+            sys.stdout.flush()
+
+    return ("".join(buffer), False)
+
+
 def ai_mode():
 
     """AI-powered interactive mode: parse images or free-form text via AI.
@@ -144,6 +231,7 @@ def ai_mode():
     model = os.environ.get("OPENAI_MODEL", "gpt-4o")
     base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
 
+    paste_hint = "Ctrl+V" if sys.platform == "win32" else "Cmd+V"
     print()
     print("=" * 56)
     print("  🤖 AI 日程解析模式")
@@ -151,7 +239,7 @@ def ai_mode():
     print(f"  模型: {model}")
     print(f"  API : {base_url}")
     print()
-    print("  图片: Cmd+V 粘贴截图 → 可添加多张 → 确认后 AI 解析生成 .ics")
+    print(f"  图片: {paste_hint} 粘贴截图 → 可添加多张 → 确认后 AI 解析生成 .ics")
     print("  文本: 直接粘贴日程描述（多行粘贴后补空行，解析后即确认导入）")
     print("  命令: d 生成ics | q 退出")
     print("-" * 56)
@@ -245,7 +333,7 @@ def ai_mode():
             except (EOFError, KeyboardInterrupt):
                 more = "n"
             if more in ("", "y", "yes"):
-                print("  → 请继续 Cmd+V 粘贴下一张图片\n")
+                print(f"  → 请继续 {paste_hint} 粘贴下一张图片\n")
                 continue
             # 不再添加 → 解析所有累积图片
             print(f"⏳ 正在调用 AI 解析 ({len(pending_images)} 张图片)...")
